@@ -61,8 +61,8 @@ module Kaui
         nil
       end
 
-      @overdue = wait(fetch_overdue)
-      @overdue_xml = wait(fetch_overdue_xml)
+      @overdue = flash[:overdue_deleted] ? nil : wait(fetch_overdue)
+      @overdue_xml = flash[:overdue_deleted] ? nil : wait(fetch_overdue_xml)
       @tenant_plugin_config = begin
         wait(fetch_tenant_plugin_config)
       rescue StandardError
@@ -311,6 +311,7 @@ module Kaui
       view_form_model['states'] = view_form_model['states'].values if view_form_model['states'].present?
       if view_form_model['states'].blank?
         Kaui::AdminTenant.delete_tenant_user_key_value('OVERDUE_CONFIG', options[:username], nil, comment, options)
+        flash[:overdue_deleted] = true
         redirect_to admin_tenant_path(current_tenant.id, active_tab: 'OverdueShow'), notice: I18n.t('flashes.notices.overdue_updated_successfully')
       else
         overdue = Kaui::Overdue.from_overdue_form_model(view_form_model)
