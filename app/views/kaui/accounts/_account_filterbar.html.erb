@@ -118,6 +118,22 @@ $(document).ready(function() {
     var searchLabelsContainer = $('#search-labels-container');
     searchLabelsContainer.empty();
 
+    // Validate that at least one search field has a value
+    var hasValue = false;
+    searchFields.each(function() {
+      var value = $(this).find('.search-field-value').val().trim();
+      if (value !== '') {
+        hasValue = true;
+        return false; // Break the loop
+      }
+    });
+
+    // If no search field has a value, show an alert and prevent search
+    if (!hasValue) {
+      alert('Please enter a value for at least one search field.');
+      return;
+    }
+
     var table = $('#accounts-table').DataTable();
     table.off('preXhr.dt.filter');
     table.on('preXhr.dt.filter', function(e, settings, data) {

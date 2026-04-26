@@ -126,15 +126,36 @@ $(document).ready(function() {
     var searchLabelsContainer = $('#search-labels-container');
     searchLabelsContainer.empty();
 
+    // Validate that at least one search field has a value
+    var hasValue = false;
+    searchFields.each(function() {
+      var value = $(this).find('.search-field-value').val().trim();
+      if (value !== '') {
+        hasValue = true;
+        return false; // Break the loop
+      }
+    });
+
+    // If no search field has a value, show an alert and prevent search
+    if (!hasValue) {
+      alert('Please enter a value for at least one search field.');
+      return;
+    }
+
     var table = $('#payments-table').DataTable();
-    table.on('preXhr.dt', function(e, settings, data) {
+    table.off('preXhr.dt.filter');
+    table.on('preXhr.dt.filter', function(e, settings, data) {
       data.search.value = searchQuery("<%= @search_query.to_s %>");
     });
 
-    table.ajax.url("<%= payments_pagination_path(:ordering => @ordering, :format => :json) %>").load();
+    var searchParams = searchQuery("<%= @search_query.to_s %>");
+    var ajaxUrl = "<%= payments_pagination_path(:ordering => @ordering, :format => :json) %>";
+    if (searchParams) {
+      ajaxUrl += (ajaxUrl.includes('?') ? '&' : '?') + searchParams;
+    }
+    table.ajax.url(ajaxUrl).load();
 
     // Update the URL with the search parameters
-    var searchParams = searchQuery("<%= @search_query.to_s %>");
     if (searchParams) {
       searchParams = searchParams.replace(/account_id/g, 'ac_id');
       var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + searchParams;
