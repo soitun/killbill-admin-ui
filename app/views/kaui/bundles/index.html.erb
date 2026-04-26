@@ -23,6 +23,13 @@
                     }
                   }
                 } %>
+            <%= render "kaui/components/menu_dropdown/menu_dropdown", {
+                  label: "Saved Searches",
+                  icon: "kaui/save.svg",
+                  variant: "btn btn-outline-secondary d-inline-flex align-items-center gap-1 kaui-button custom-hover",
+                  dropdown_id: "savedSearchesDropdown",
+                  menu_items: []
+                } %>
             <% if can? :create, Kaui::Subscription %>
               <%= link_to kaui_engine.new_subscription_path(:params => { :account_id => @account.account_id, :product_category => 'BASE' }) do %>
                 <%= render "kaui/components/button/button", {

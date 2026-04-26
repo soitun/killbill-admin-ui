@@ -8,7 +8,9 @@
         <%= render "kaui/components/menu_dropdown/menu_dropdown", {
           label: action[:label],
           icon: action[:icon],
-          dropdown_id: "menuDropdown#{index}",
+          variant: action[:variant] ? action[:variant] : "btn btn-primary",
+          html_class: action[:html_class] || "",
+          dropdown_id: action[:id] || "menuDropdown#{index}",
           menu_items: action[:items]
         } %>
       <% else %>

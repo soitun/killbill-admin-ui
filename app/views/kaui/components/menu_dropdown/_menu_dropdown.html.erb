@@ -1,4 +1,4 @@
-<% variant ||= "btn-primary" %>
+<% variant ||= "btn btn-primary" %>
 <% type ||= "button" %>
 <% label ||= "Submit" %>
 <% icon ||= nil %>
@@ -11,7 +11,7 @@
 <div class="dropdown dropdown-menu-end position-relative" id="<%= dropdown_id %>_wrapper">
   <%= tag.button raw("#{icon_html}#{label}"),
       type: type,
-      class: "btn kaui-dropdown custom-hover #{variant} #{html_class}",
+      class: "#{variant} #{html_class}",
       id: "#{dropdown_id}_button",
       aria: { expanded: "false" } %>
 

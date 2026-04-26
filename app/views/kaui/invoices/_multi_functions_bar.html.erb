@@ -1,6 +1,6 @@
 <div class="d-flex">
 <div class="filter-bar-container">
-  <div class="filter-bar">
+  <div class="filter-bar d-flex gap-2">
     <%= render "kaui/components/button/button", {
       label: "Advanced Search",
       icon: "kaui/search.svg",
@@ -14,7 +14,13 @@
         }
       }
     } %>
-
+    <%= render "kaui/components/menu_dropdown/menu_dropdown", {
+      label: "Saved Searches",
+      icon: "kaui/save.svg",
+      variant: "btn btn-outline-secondary d-inline-flex align-items-center gap-1 kaui-button custom-hover",
+      dropdown_id: "savedSearchesDropdown",
+      menu_items: []
+    } %>
   </div>
 </div>
 
