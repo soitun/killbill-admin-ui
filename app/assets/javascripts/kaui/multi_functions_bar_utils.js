@@ -135,6 +135,9 @@ function searchQuery(account_id){
 };
 
 function clearAdvanceSearch() {
+  var hasActiveSearch = $('#search-labels-container .label').length > 0 ||
+                        window.location.search.includes('_q=1');
+
   // Clear all search fields
   $('#search-fields-container').empty();
 
@@ -144,11 +147,13 @@ function clearAdvanceSearch() {
   // Clear Persisted Search for this page
   localStorage.removeItem('kaui_adv_search_' + window.location.pathname);
 
-  // Reload the page with the original URL (no parameters)
-  window.location.href = window.location.pathname;
-
   // Hide the modal
   $('#advanceSearchModal').modal('hide');
+
+  // Only reload if there was an active search to clear
+  if (hasActiveSearch) {
+    window.location.href = window.location.pathname;
+  }
 }
 
 function showAdvanceSearchModal() {
