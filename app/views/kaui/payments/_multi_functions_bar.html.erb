@@ -219,13 +219,6 @@ $(document).ready(function() {
     return new bootstrap.Dropdown(dropdownToggleEl);
   });
 
-  // Manual dropdown toggle as fallback
-  $('#dropdownMenu1').on('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    $('#column-visibility').toggleClass('show');
-  });
-
   $('.dropdown-menu').on('click', 'input[type="checkbox"], label', function(event) {
     event.stopPropagation();
   });
