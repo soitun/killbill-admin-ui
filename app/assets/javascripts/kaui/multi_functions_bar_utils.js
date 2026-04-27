@@ -84,11 +84,6 @@ function populateSearchLabelsFromUrl() {
 
 function searchQuery(account_id){
   var searchFields = $('.search-field');
-  var searchLabelsContainer = $('#search-labels-container');
-  
-  if (searchFields.length > 0) {
-    searchLabelsContainer.empty();
-  }
   var searchLabels = '';
   if (searchFields.length > 0) {
     searchLabels = searchFields.map(function() {
