@@ -36,9 +36,25 @@
           </div>
           <div id="search-fields-container">
           </div>
+          <div id="save-search-container" style="display: none;">
+            <hr class="mt-4 mb-3">
+            <div class="form-group d-flex align-items-center mb-0">
+              <label for="savedSearchName" class="mr-2 field-label" style="width: 30%;">Save As Name</label>
+              <input type="text" id="savedSearchName" class="form-control flex-grow-1" placeholder="Enter a name for this search...">
+            </div>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
+        <%= render "kaui/components/button/button", {
+          label: 'Save Search As...',
+          variant: "outline-secondary d-inline-flex align-items-center gap-1",
+          type: "button",
+          html_class: "kaui-button custom-hover",
+          html_options: {
+            id: "saveAdvanceSearch"
+          }
+        } %>
         <%= render "kaui/components/button/button", {
           label: 'Clear Search',
           variant: "outline-secondary d-inline-flex align-items-center gap-1",
@@ -87,14 +103,6 @@
 
 <%= javascript_tag do %>
 $(document).ready(function() {
-  // Restore advanced search from localStorage if no search params in current URL (global /payments page only)
-  if (!window.location.search.includes('_q=1') && !window.location.pathname.includes('/accounts/')) {
-    var savedSearch = localStorage.getItem('kaui_adv_search_' + window.location.pathname);
-    if (savedSearch) {
-      window.location.replace(window.location.pathname + '?' + savedSearch);
-      return;
-    }
-  }
 
   populateSearchLabelsFromUrl();
 
@@ -126,22 +134,40 @@ $(document).ready(function() {
     var searchLabelsContainer = $('#search-labels-container');
     searchLabelsContainer.empty();
 
+    // Validate that at least one search field has a value
+    var hasValue = false;
+    searchFields.each(function() {
+      var value = $(this).find('.search-field-value').val().trim();
+      if (value !== '') {
+        hasValue = true;
+        return false; // Break the loop
+      }
+    });
+
+    // If no search field has a value, show an alert and prevent search
+    if (!hasValue) {
+      alert('Please enter a value for at least one search field.');
+      return;
+    }
+
     var table = $('#payments-table').DataTable();
-    table.on('preXhr.dt', function(e, settings, data) {
+    table.off('preXhr.dt.filter');
+    table.on('preXhr.dt.filter', function(e, settings, data) {
       data.search.value = searchQuery("<%= @search_query.to_s %>");
     });
 
-    table.ajax.url("<%= payments_pagination_path(:ordering => @ordering, :format => :json) %>").load();
+    var searchParams = searchQuery("<%= @search_query.to_s %>");
+    var ajaxUrl = "<%= payments_pagination_path(:ordering => @ordering, :format => :json) %>";
+    if (searchParams) {
+      ajaxUrl += (ajaxUrl.includes('?') ? '&' : '?') + searchParams;
+    }
+    table.ajax.url(ajaxUrl).load();
 
     // Update the URL with the search parameters
-    var searchParams = searchQuery("<%= @search_query.to_s %>");
     if (searchParams) {
       searchParams = searchParams.replace(/account_id/g, 'ac_id');
       var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + searchParams;
       window.history.pushState({ path: newUrl }, '', newUrl);
-      if (!window.location.pathname.includes('/accounts/')) {
-        localStorage.setItem('kaui_adv_search_' + window.location.pathname, searchParams);
-      }
     }
 
     searchFields.each(function() {

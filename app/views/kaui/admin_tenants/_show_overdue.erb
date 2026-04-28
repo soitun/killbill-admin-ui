@@ -32,7 +32,7 @@
         <table id="existing-overdue-config-for-tenants" class="existing-overdue-config-for-tenants-table">
           <span class='label'>
           </span>
-          <% if @overdue.nil? || @overdue.has_states %>
+          <% if @overdue.nil? || @overdue.overdue_states.empty? || @overdue.has_states %>
             No overdue configuration defined for tenant
           <% else %>
             <thead>

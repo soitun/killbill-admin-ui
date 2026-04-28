@@ -28,9 +28,23 @@
             <label for="bundleSearchValue" class="mr-2 field-label" style="width: 30%;">Value</label>
             <input type="text" id="bundleSearchValue" class="form-control" placeholder="Enter search value..." value="<%= @search_query %>">
           </div>
+          <div id="save-search-container" style="display: none;">
+            <hr class="mt-4 mb-3">
+            <div class="form-group d-flex align-items-center mb-0">
+              <label for="savedSearchName" class="mr-2 field-label" style="width: 30%;">Save As Name</label>
+              <input type="text" id="savedSearchName" class="form-control flex-grow-1" placeholder="Enter a name for this search...">
+            </div>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
+        <%= render "kaui/components/button/button", {
+          label: 'Save Search As...',
+          variant: "outline-secondary d-inline-flex align-items-center gap-1",
+          type: "button",
+          html_class: "kaui-button custom-hover",
+          html_options: { id: "saveAdvanceSearch" }
+        } %>
         <%= render "kaui/components/button/button", {
           label: 'Clear Search',
           variant: "outline-secondary d-inline-flex align-items-center gap-1",

@@ -84,11 +84,6 @@ function populateSearchLabelsFromUrl() {
 
 function searchQuery(account_id){
   var searchFields = $('.search-field');
-  var searchLabelsContainer = $('#search-labels-container');
-  
-  if (searchFields.length > 0) {
-    searchLabelsContainer.empty();
-  }
   var searchLabels = '';
   if (searchFields.length > 0) {
     searchLabels = searchFields.map(function() {
@@ -135,20 +130,25 @@ function searchQuery(account_id){
 };
 
 function clearAdvanceSearch() {
+  var hasActiveSearch = $('#search-labels-container .label').length > 0 ||
+                        window.location.search.includes('_q=1');
+
   // Clear all search fields
   $('#search-fields-container').empty();
 
   // Remove all search labels
   $('#search-labels-container').empty();
 
-  // Clear persisted search for this page
+  // Clear Persisted Search for this page
   localStorage.removeItem('kaui_adv_search_' + window.location.pathname);
-
-  // Reload the page with the original URL (no parameters)
-  window.location.href = window.location.pathname;
 
   // Hide the modal
   $('#advanceSearchModal').modal('hide');
+
+  // Only reload if there was an active search to clear
+  if (hasActiveSearch) {
+    window.location.href = window.location.pathname;
+  }
 }
 
 function showAdvanceSearchModal() {
@@ -229,10 +229,181 @@ $(document).on('click', '.filter-close-icon', function() {
     var pushParams = (searchParams || '').replace(/account_id/g, 'ac_id');
     var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + pushParams;
     window.history.pushState({ path: newUrl }, '', newUrl);
-    localStorage.setItem('kaui_adv_search_' + window.location.pathname, searchParams);
   } else {
     var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
     window.history.pushState({ path: newUrl }, '', newUrl);
-    localStorage.removeItem('kaui_adv_search_' + window.location.pathname);
   }
+});
+
+// --- Saved Searches Logic ---
+function getSavedSearches() {
+  var key = 'kaui_saved_searches_' + window.location.pathname;
+  var data = localStorage.getItem(key);
+  if (!data) return {};
+  try {
+    var parsed = JSON.parse(data);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed;
+    }
+  } catch (e) {
+    // Legacy string format or invalid JSON
+    var legacy = {};
+    legacy["Default"] = data;
+    localStorage.setItem(key, JSON.stringify(legacy));
+    return legacy;
+  }
+  return {};
+}
+
+function saveSavedSearches(searches) {
+  var key = 'kaui_saved_searches_' + window.location.pathname;
+  localStorage.setItem(key, JSON.stringify(searches));
+}
+
+function populateSavedSearchesDropdown() {
+  var menu = $('#savedSearchesDropdown_menu');
+  if (!menu.length) return;
+  
+  menu.empty();
+  var searches = getSavedSearches();
+  var names = Object.keys(searches);
+  
+  var dropdownButton = $('#savedSearchesDropdown_button');
+  if (names.length === 0) {
+    menu.append('<li><span class="dropdown-item text-muted">No saved searches</span></li>');
+    return;
+  }
+  
+  names.forEach(function(name) {
+    var li = $('<li>');
+    var a = $('<a>', {
+      class: 'dropdown-item d-flex align-items-center justify-content-between apply-saved-search',
+      href: 'javascript:void(0);',
+      'data-name': name,
+      style: 'cursor: pointer;'
+    });
+    
+    var nameSpan = $('<span>', {
+      class: 'text-black-700 fs-6 text-normal',
+      style: 'font-weight: 500; font-size: 0.875rem !important; line-height: 1.25rem;',
+      text: name
+    });
+    
+    var deleteIcon = $('<span>', {
+      class: 'delete-saved-search text-danger',
+      'data-name': name,
+      style: 'cursor: pointer; padding: 0 5px; font-weight: bold;',
+      html: '&times;',
+      title: 'Delete saved search'
+    });
+    
+    a.append(nameSpan).append(deleteIcon);
+    li.append(a);
+    menu.append(li);
+  });
+}
+
+$(document).ready(function() {
+  populateSavedSearchesDropdown();
+
+  $(document).on('submit', '#advanceSearchForm', function(e) {
+    e.preventDefault();
+    return false;
+  });
+
+  $(document).on('input', '#savedSearchName', function() {
+    var val = $(this).val().trim();
+    if (val === '') {
+      $('#saveAdvanceSearch').text('Save Search As...');
+    } else {
+      $('#saveAdvanceSearch').text('Save');
+    }
+  });
+
+  $(document).on('click', '#saveAdvanceSearch', function(e) {
+    e.preventDefault();
+    var container = $('#save-search-container');
+    var input = $('#savedSearchName');
+    
+    if (!container.is(':visible')) {
+      container.show();
+      input.focus();
+      return;
+    }
+    
+    var name = input.val().trim();
+    if (name === '') {
+      container.hide();
+      return;
+    }
+    
+    var searchParams = '';
+    
+    // For bundles, it's search_by and q. For everything else, it's searchQuery()
+    if (window.location.pathname.includes('/bundles')) {
+       var searchBy = $('#searchFieldSelect').val();
+       var q = $('#bundleSearchValue').val();
+       if (q) q = q.trim();
+       if (!q) {
+         alert("Please enter a value to search.");
+         return;
+       }
+       searchParams = 'search_by=' + encodeURIComponent(searchBy) + '&q=' + encodeURIComponent(q);
+    } else {
+       // Check if there are any search fields before calling searchQuery(),
+       // because searchQuery() calls clearAdvanceSearch() (which reloads the page)
+       // when no fields exist.
+       if ($('.search-field').length === 0 && $('#search-labels-container .label').length === 0) {
+         alert("Please enter at least one search field.");
+         return;
+       }
+       searchParams = searchQuery();
+       if (!searchParams) {
+         alert("Please enter at least one search field.");
+         return;
+       }
+       searchParams = searchParams.replace(/account_id/g, 'ac_id');
+    }
+    
+    var searches = getSavedSearches();
+    searches[name] = searchParams;
+    saveSavedSearches(searches);
+    
+    input.val('');
+    $('#saveAdvanceSearch').text('Save Search As...');
+    container.hide();
+    
+    populateSavedSearchesDropdown();
+    $('#advanceSearchModal').modal('hide');
+  });
+
+  $(document).on('hidden.bs.modal', '#advanceSearchModal', function () {
+    $('#save-search-container').hide();
+    $('#savedSearchName').val('');
+    $('#saveAdvanceSearch').text('Save Search As...');
+  });
+
+  $(document).on('click', '.apply-saved-search', function(e) {
+    // If they clicked the delete icon, don't apply the search
+    if ($(e.target).hasClass('delete-saved-search')) return;
+    
+    var name = $(this).data('name');
+    var searches = getSavedSearches();
+    var params = searches[name];
+    if (params) {
+      var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + params;
+      window.location.href = newUrl;
+    }
+  });
+
+  $(document).on('click', '.delete-saved-search', function(e) {
+    e.stopPropagation(); // prevent dropdown from closing and prevent applying search
+    var name = $(this).data('name');
+    if (confirm("Are you sure you want to delete the saved search '" + name + "'?")) {
+      var searches = getSavedSearches();
+      delete searches[name];
+      saveSavedSearches(searches);
+      populateSavedSearchesDropdown();
+    }
+  });
 });
