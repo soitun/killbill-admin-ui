@@ -141,7 +141,7 @@
                 </div>
               <% end %>
 
-              <% if can?(:create, Kaui::Subscription) || can?(:pause_resume, Kaui::Subscription) || can?(:change_plan, Kaui::Subscription) || can?(:transfer, Kaui::Bundle) %>
+              <% if can?(:create, Kaui::Subscription) || can?(:pause_resume, Kaui::Subscription) || can?(:change_plan, Kaui::Subscription) || can?(:transfer, Kaui::Bundle) || (can?(:record, Kaui::Usage) && subscription_has_usage?(sub, catalog_for_subscription(sub, catalogs))) %>
                 <% menu_items = [] %>
 
                 <% if can?(:change_plan, Kaui::Subscription) %>
@@ -187,6 +187,14 @@
                   <% menu_items << {
                     label: "Update Quantity",
                     path: kaui_engine.edit_quantity_path(id: sub.subscription_id),
+                    icon: "kaui/subscription/change.svg"
+                  } %>
+                <% end %>
+
+                <% if can?(:record, Kaui::Usage) && subscription_has_usage?(sub, catalog_for_subscription(sub, catalogs)) %>
+                  <% menu_items << {
+                    label: "Record Usage",
+                    path: kaui_engine.record_usage_path(id: sub.subscription_id),
                     icon: "kaui/subscription/change.svg"
                   } %>
                 <% end %>

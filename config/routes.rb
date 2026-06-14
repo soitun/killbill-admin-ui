@@ -143,6 +143,8 @@ Kaui::Engine.routes.draw do
     put '/:id/update_bcd' => 'subscriptions#update_bcd', :as => 'update_bcd'
     get '/:id/edit_quantity' => 'subscriptions#edit_quantity', :as => 'edit_quantity'
     put '/:id/update_quantity' => 'subscriptions#update_quantity', :as => 'update_quantity'
+    get '/:id/record_usage' => 'subscriptions#record_usage', :as => 'record_usage'
+    post '/:id/record_usage' => 'subscriptions#create_usage', :as => 'create_usage'
     put '/:id/reinstate' => 'subscriptions#reinstate', :as => 'reinstate'
     get '/validate_external_key' => 'subscriptions#validate_external_key', :as => 'subscriptions_validate_external_key'
     get '/validate_bundle_external_key' => 'subscriptions#validate_bundle_external_key', :as => 'subscriptions_validate_bundle_external_key'

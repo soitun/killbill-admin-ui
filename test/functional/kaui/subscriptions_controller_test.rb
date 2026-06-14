@@ -365,6 +365,138 @@ module Kaui
       end
     end
 
+    test 'should get record usage form' do
+      get :record_usage, params: { id: @bundle.subscriptions.first.subscription_id }
+      assert_response :success
+      assert_not_nil assigns(:subscription)
+      assert_equal @bundle.subscriptions.first.subscription_id, assigns(:subscription).subscription_id
+    end
+
+    test 'should handle Kill Bill errors when loading record usage form' do
+      subscription_id = SecureRandom.uuid.to_s
+      get :record_usage, params: { id: subscription_id }
+      assert_redirected_to home_path
+      assert_equal "Error while communicating with the Kill Bill server: Object id=#{subscription_id} type=SUBSCRIPTION doesn't exist!", flash[:error]
+    end
+
+    test 'should require id when recording usage' do
+      assert_raises(ActionController::ParameterMissing) do
+        post :create_usage, params: { unit_type: 'gallons', amount: 10, record_date: Time.now.utc.iso8601 }
+      end
+    end
+
+    test 'should reject record usage with missing unit type' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: '',
+             amount: 10,
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Unit type is required/, flash.now[:error])
+    end
+
+    test 'should reject record usage with non-positive amount' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: '0',
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Amount must be a positive integer/, flash.now[:error])
+    end
+
+    test 'should reject record usage with non-integer amount' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: '3.5',
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Amount must be a positive integer/, flash.now[:error])
+    end
+
+    test 'should reject record usage with missing date' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: 10,
+             record_date: ''
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Date\/time of usage is required/, flash.now[:error])
+    end
+
+    test 'should reject record usage with invalid date format' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: 10,
+             record_date: 'not-a-date'
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Date\/time of usage must be a valid ISO 8601 timestamp/, flash.now[:error])
+    end
+
+    test 'should report multiple validation errors at once' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: '',
+             amount: '-1',
+             record_date: 'bogus'
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Unit type is required/, flash.now[:error])
+      assert_match(/Amount must be a positive integer/, flash.now[:error])
+      assert_match(/Date\/time of usage must be a valid ISO 8601 timestamp/, flash.now[:error])
+    end
+
+    test 'should record usage for a usage-based subscription' do
+      # Add a usage-based add-on (gas-monthly / gallons) to the existing Sports bundle
+      addon = Kaui::Subscription.new(account_id: @account.account_id,
+                                     bundle_id: @bundle.bundle_id,
+                                     plan_name: 'gas-monthly')
+      addon = addon.create('Kaui test', nil, nil, nil, false, build_options(@tenant))
+
+      post :create_usage,
+           params: {
+             id: addon.subscription_id,
+             unit_type: 'gallons',
+             amount: 42,
+             record_date: Time.now.utc.iso8601
+           }
+      assert_redirected_to account_bundles_path(@account.account_id)
+      assert_equal 'Usage was successfully recorded', flash[:notice]
+    end
+
+    test 'should display Kill Bill error when recording usage with unknown unit type' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'no-such-unit',
+             amount: 1,
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_not_nil flash.now[:error]
+      assert_match(/Error while recording usage/, flash.now[:error])
+    end
+
     test 'should validate external key if found' do
       get :validate_external_key, params: { external_key: 'foo' }
       assert_response :success

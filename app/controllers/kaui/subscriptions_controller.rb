@@ -174,6 +174,75 @@ module Kaui
       redirect_to kaui_engine.account_bundles_path(input_subscription['account_id']), notice: 'Subscription quantity was successfully changed'
     end
 
+    def record_usage
+      @subscription = Kaui::Subscription.find_by_id(params.require(:id), 'NONE', options_for_klient)
+    end
+
+    def create_usage
+      subscription_id = params.require(:id)
+      unit_type = params[:unit_type].to_s.strip
+      amount_raw = params[:amount].to_s.strip
+      record_date = params[:record_date].to_s.strip
+
+      # Input validation
+      errors = []
+      errors << 'Unit type is required' if unit_type.blank?
+      errors << 'Amount is required' if amount_raw.blank?
+      amount = begin
+        Integer(amount_raw)
+      rescue ArgumentError, TypeError
+        nil
+      end
+      errors << 'Amount must be a positive integer' if amount.nil? || amount <= 0
+      errors << 'Date/time of usage is required' if record_date.blank?
+      parsed_date = begin
+        record_date.blank? ? nil : Time.iso8601(record_date)
+      rescue ArgumentError
+        nil
+      end
+      errors << 'Date/time of usage must be a valid ISO 8601 timestamp' if record_date.present? && parsed_date.nil?
+
+      if errors.any?
+        flash.now[:error] = errors.join('. ')
+        @subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        @unit_type = unit_type
+        @amount = amount_raw
+        @record_date = record_date
+        @tracking_id = params[:tracking_id]
+        render :record_usage and return
+      end
+
+      begin
+        usage_record = KillBillClient::Model::UsageRecordAttributes.new
+        usage_record.record_date = parsed_date.utc.iso8601
+        usage_record.amount = amount
+
+        unit_usage_record = KillBillClient::Model::UnitUsageRecordAttributes.new
+        unit_usage_record.unit_type = unit_type
+        unit_usage_record.usage_records = [usage_record]
+
+        usage = Kaui::Usage.new
+        usage.subscription_id = subscription_id
+        usage.tracking_id = params[:tracking_id].presence
+        usage.unit_usage_records = [unit_usage_record]
+
+        usage.create(current_user.kb_username, params[:reason], params[:comment], options_for_klient)
+
+        subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        redirect_to kaui_engine.account_bundles_path(subscription.account_id), notice: 'Usage was successfully recorded'
+      rescue StandardError => e
+        Rails.logger.error("Failed to record usage for subscription #{subscription_id}: #{e.class}: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
+        flash.now[:error] = "Error while recording usage: #{as_string(e)}"
+        @subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        @unit_type = unit_type
+        @amount = amount_raw
+        @record_date = record_date
+        @tracking_id = params[:tracking_id]
+        render :record_usage
+      end
+    end
+
     def restful_show
       subscription = Kaui::Subscription.find_by_id(params.require(:id), 'NONE', options_for_klient)
       redirect_to kaui_engine.account_bundles_path(subscription.account_id)
