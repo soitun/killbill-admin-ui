@@ -248,6 +248,15 @@ module Kaui
       redirect_to kaui_engine.account_bundles_path(subscription.account_id)
     end
 
+    def show_json
+      raw_body = Kaui::Subscription.find_raw_by_id(params.require(:id), 'NONE', options_for_klient)
+      render json: raw_body
+    rescue KillBillClient::API::ResponseError => e
+      render json: e.response.body, status: e.code
+    rescue StandardError => e
+      render json: { error: e.message }, status: 500
+    end
+
     def validate_bundle_external_key
       json_response do
         external_key = params.require(:external_key)

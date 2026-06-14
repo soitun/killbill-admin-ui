@@ -553,5 +553,46 @@ module Kaui
       post(:update_tags, params:)
       assert_response :found
     end
+
+    test 'should return raw JSON for show_json' do
+      subscription_id = @bundle.subscriptions.first.subscription_id
+      get :show_json, params: { id: subscription_id }
+
+      assert_response :ok
+      assert_equal 'application/json', @response.media_type
+
+      body = JSON.parse(@response.body)
+      assert_equal subscription_id, body['subscriptionId']
+      assert_equal @bundle.bundle_id, body['bundleId']
+      assert_equal @account.account_id, body['accountId']
+    end
+
+    test 'show_json should delegate to find_raw_by_id and return its body verbatim' do
+      subscription_id = @bundle.subscriptions.first.subscription_id
+      raw_payload = '{"subscriptionId":"' + subscription_id + '","note":"raw passthrough"}'
+
+      Kaui::Subscription.stub(:find_raw_by_id, raw_payload) do
+        get :show_json, params: { id: subscription_id }
+      end
+
+      assert_response :ok
+      assert_equal 'application/json', @response.media_type
+      assert_equal raw_payload, @response.body
+    end
+
+    test 'show_json should surface Kill Bill errors with the original status code' do
+      missing_id = SecureRandom.uuid.to_s
+      get :show_json, params: { id: missing_id }
+
+      assert_response :not_found
+      body = JSON.parse(@response.body)
+      assert_includes body['message'].to_s, missing_id
+    end
+
+    test 'show_json should require an id' do
+      assert_raises(ActionController::ParameterMissing) do
+        get :show_json, params: {}
+      end
+    end
   end
 end

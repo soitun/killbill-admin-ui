@@ -159,9 +159,9 @@
                 </div>
               <% end %>
 
-              <% if can?(:create, Kaui::Subscription) || can?(:pause_resume, Kaui::Subscription) || can?(:change_plan, Kaui::Subscription) || can?(:transfer, Kaui::Bundle) || (can?(:record, Kaui::Usage) && subscription_has_usage?(sub, catalog_for_subscription(sub, catalogs))) %>
-                <% menu_items = [] %>
+              <% menu_items = [] %>
 
+              <% if can?(:create, Kaui::Subscription) || can?(:pause_resume, Kaui::Subscription) || can?(:change_plan, Kaui::Subscription) || can?(:transfer, Kaui::Bundle) || (can?(:record, Kaui::Usage) && subscription_has_usage?(sub, catalog_for_subscription(sub, catalogs))) %>
                 <% if can?(:change_plan, Kaui::Subscription) %>
                   <% menu_items << {
                     label: "Change Plan",
@@ -224,7 +224,18 @@
                     icon: "kaui/subscription/transfer.svg"
                   } %>
                 <% end %>
+              <% end %>
 
+              <% if can?(:read, Kaui::Subscription) %>
+                <% menu_items << {
+                  label: "View JSON",
+                  path: "#view_subscription_json_modal",
+                  icon: "kaui/view-doc.svg",
+                  data: { bs_toggle: 'modal', id: sub.subscription_id }
+                } %>
+              <% end %>
+
+              <% if menu_items.any? %>
                 <%= render partial: "kaui/components/menu_dropdown/menu_dropdown", locals: {
                     variant: "btn-light",
                     label: "",
@@ -244,6 +255,7 @@
 </table>
 
 <%= render :partial => 'kaui/subscriptions/cancel_by_date_modal' %>
+<%= render :partial => 'kaui/subscriptions/view_json_modal' %>
 
 <%= javascript_tag do %>
   $(document).ready(function() {

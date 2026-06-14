@@ -146,6 +146,7 @@ Kaui::Engine.routes.draw do
     get '/:id/record_usage' => 'subscriptions#record_usage', :as => 'record_usage'
     post '/:id/record_usage' => 'subscriptions#create_usage', :as => 'create_usage'
     put '/:id/reinstate' => 'subscriptions#reinstate', :as => 'reinstate'
+    get '/:id/show_json' => 'subscriptions#show_json', :as => 'show_subscription_json'
     get '/validate_external_key' => 'subscriptions#validate_external_key', :as => 'subscriptions_validate_external_key'
     get '/validate_bundle_external_key' => 'subscriptions#validate_bundle_external_key', :as => 'subscriptions_validate_bundle_external_key'
   end
