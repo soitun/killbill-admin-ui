@@ -360,9 +360,9 @@ module Kaui
     end
 
     test 'should require subscription params on update quantity' do
-      assert_raises(ActionController::ParameterMissing) do
-        put :update_quantity, params: { id: @bundle.subscriptions.first.subscription_id }
-      end
+      put :update_quantity, params: { id: @bundle.subscriptions.first.subscription_id }
+      assert_redirected_to edit_quantity_path(@bundle.subscriptions.first.subscription_id)
+      assert_equal 'Required parameter missing: subscription', flash[:error]
     end
 
     test 'should get record usage form' do
@@ -380,7 +380,7 @@ module Kaui
     end
 
     test 'should require id when recording usage' do
-      assert_raises(ActionController::ParameterMissing) do
+      assert_raises(ActionController::UrlGenerationError) do
         post :create_usage, params: { unit_type: 'gallons', amount: 10, record_date: Time.now.utc.iso8601 }
       end
     end
@@ -434,7 +434,7 @@ module Kaui
            }
       assert_response :success
       assert_template :record_usage
-      assert_match(/Date\/time of usage is required/, flash.now[:error])
+      assert_match(%r{Date/time of usage is required}, flash.now[:error])
     end
 
     test 'should reject record usage with invalid date format' do
@@ -447,7 +447,7 @@ module Kaui
            }
       assert_response :success
       assert_template :record_usage
-      assert_match(/Date\/time of usage must be a valid ISO 8601 timestamp/, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
     end
 
     test 'should report multiple validation errors at once' do
@@ -462,7 +462,7 @@ module Kaui
       assert_template :record_usage
       assert_match(/Unit type is required/, flash.now[:error])
       assert_match(/Amount must be a positive integer/, flash.now[:error])
-      assert_match(/Date\/time of usage must be a valid ISO 8601 timestamp/, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
     end
 
     test 'should record usage for a usage-based subscription' do
@@ -484,13 +484,18 @@ module Kaui
     end
 
     test 'should display Kill Bill error when recording usage with unknown unit type' do
-      post :create_usage,
-           params: {
-             id: @bundle.subscriptions.first.subscription_id,
-             unit_type: 'no-such-unit',
-             amount: 1,
-             record_date: Time.now.utc.iso8601
-           }
+      stub_usage = Struct.new(:subscription_id, :tracking_id, :unit_usage_records).new
+      stub_usage.define_singleton_method(:create) { |*| raise StandardError, 'Unknown unit type: no-such-unit' }
+
+      Kaui::Usage.stub(:new, stub_usage) do
+        post :create_usage,
+             params: {
+               id: @bundle.subscriptions.first.subscription_id,
+               unit_type: 'no-such-unit',
+               amount: 1,
+               record_date: Time.now.utc.iso8601
+             }
+      end
       assert_response :success
       assert_template :record_usage
       assert_not_nil flash.now[:error]
@@ -569,7 +574,7 @@ module Kaui
 
     test 'show_json should delegate to find_raw_by_id and return its body verbatim' do
       subscription_id = @bundle.subscriptions.first.subscription_id
-      raw_payload = '{"subscriptionId":"' + subscription_id + '","note":"raw passthrough"}'
+      raw_payload = "{\"subscriptionId\":\"#{subscription_id}\",\"note\":\"raw passthrough\"}"
 
       Kaui::Subscription.stub(:find_raw_by_id, raw_payload) do
         get :show_json, params: { id: subscription_id }
@@ -590,7 +595,7 @@ module Kaui
     end
 
     test 'show_json should require an id' do
-      assert_raises(ActionController::ParameterMissing) do
+      assert_raises(ActionController::UrlGenerationError) do
         get :show_json, params: {}
       end
     end

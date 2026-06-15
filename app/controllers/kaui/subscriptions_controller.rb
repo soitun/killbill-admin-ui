@@ -163,15 +163,18 @@ module Kaui
     end
 
     def update_quantity
+      id = params.require(:id)
       input_subscription = params.require(:subscription)
       subscription = Kaui::Subscription.new
-      subscription.subscription_id = params.require(:id)
+      subscription.subscription_id = id
       subscription.quantity = input_subscription['quantity'].to_i
 
       effective_from_date = params['effective_from_date']
 
       subscription.update_quantity(current_user.kb_username, params[:reason], params[:comment], effective_from_date, nil, options_for_klient)
       redirect_to kaui_engine.account_bundles_path(input_subscription['account_id']), notice: 'Subscription quantity was successfully changed'
+    rescue ActionController::ParameterMissing
+      redirect_to kaui_engine.edit_quantity_path(params[:id]), flash: { error: 'Required parameter missing: subscription' }
     end
 
     def record_usage
@@ -188,11 +191,7 @@ module Kaui
       errors = []
       errors << 'Unit type is required' if unit_type.blank?
       errors << 'Amount is required' if amount_raw.blank?
-      amount = begin
-        Integer(amount_raw)
-      rescue ArgumentError, TypeError
-        nil
-      end
+      amount = Integer(amount_raw, exception: false)
       errors << 'Amount must be a positive integer' if amount.nil? || amount <= 0
       errors << 'Date/time of usage is required' if record_date.blank?
       parsed_date = begin
@@ -254,7 +253,7 @@ module Kaui
     rescue KillBillClient::API::ResponseError => e
       render json: e.response.body, status: e.code
     rescue StandardError => e
-      render json: { error: e.message }, status: 500
+      render json: { error: e.message }, status: :internal_server_error
     end
 
     def validate_bundle_external_key
