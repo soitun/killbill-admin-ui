@@ -249,9 +249,9 @@ module Kaui
 
     def show_json
       raw_body = Kaui::Subscription.find_raw_by_id(params.require(:id), 'NONE', options_for_klient)
-      render json: raw_body
+      render body: raw_body, content_type: 'application/json'
     rescue KillBillClient::API::ResponseError => e
-      render json: e.response.body, status: e.code
+      render body: e.response.body, content_type: 'application/json', status: e.code
     rescue StandardError => e
       render json: { error: e.message }, status: :internal_server_error
     end
