@@ -165,9 +165,19 @@ module Kaui
     def update_quantity
       id = params.require(:id)
       input_subscription = params.require(:subscription)
+
+      quantity_raw = input_subscription['quantity'].to_s.strip
+      quantity = Integer(quantity_raw, exception: false)
+      if quantity.nil? || quantity <= 0
+        flash.now[:error] = 'Quantity must be a positive integer'
+        @subscription = Kaui::Subscription.find_by_id(id, 'NONE', options_for_klient)
+        @subscription.quantity = quantity_raw
+        render :edit_quantity and return
+      end
+
       subscription = Kaui::Subscription.new
       subscription.subscription_id = id
-      subscription.quantity = input_subscription['quantity'].to_i
+      subscription.quantity = quantity
 
       effective_from_date = params['effective_from_date']
 
