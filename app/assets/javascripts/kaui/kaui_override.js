@@ -392,69 +392,12 @@ function isBlank(value) {
 //      data-id = content of the popover,object id; required
 //      title = title of the popover; not required
 //      id = (must be {{id}}-popover) used to close popover when the copy image is clicked; if present; if not present a timeout of 5s will apply; not required
+//
+// Deprecated: the underlying Bootstrap 4 popover('destroy') API was removed in
+// Bootstrap 5 and this implementation has been superseded by setObjectIdTooltip().
+// Kept as a thin shim so existing call sites continue to work.
 function setObjectIdPopover(){
-    $(".object-id-popover").each(function(idx, e){
-        $(this).popover('destroy');
-        $(this).off("shown.bs.popover");
-        $(this).data("index", idx);
-
-        $(this).popover({
-            html: true,
-            content: function() {
-                var template = '<div class="{{id}}-content" >' +
-                    '{{id}}&emsp;<i id="{{id}}-copy" class="fa fa-clipboard copy-icon" aria-hidden="true"></i> ' +
-                    '</div>';
-
-                var popover_html = Mustache.render( template , { id: $(this).data("id") });
-                return popover_html;
-            },
-            container: 'body',
-            trigger: 'hover',
-            delay: { "show": 100, "hide": 4000 }
-        });
-
-        $(this).on("show.bs.popover", function(e) {
-            var currentPopoverIndex = $(this).data('index');
-            $(".object-id-popover").each(function(idx, e){
-                var index = $(this).data('index');
-
-                if (currentPopoverIndex != index) {
-                    $(this).popover('hide');
-                }
-            });
-        });
-
-        $(this).on("shown.bs.popover", function(e) {
-            var objectId = $(this).data('id');
-            var copyIdImg = $("#" + objectId + "-copy");
-
-            copyIdImg.data("popover",$(this).attr("id"));
-            copyIdImg.click(function(e){
-                var id = ($(this).attr("id")).replace('-copy','');
-                navigator.clipboard.writeText(id);
-                ajaxInfoAlert("Id [" + id + "] was copied into the clipboard!", 4000);
-
-                if (!isBlank(popover)) {
-                    popover.popover('hide');
-                }
-
-            });
-
-        });
-
-    });
-
-    // close all object id popover on modal show
-    $(".modal").on('show.bs.modal',function(e){
-        $(".object-id-popover").each(function(idx, e) {
-            $(this).popover('destroy');
-        });
-    });
-
-    // check if object id must be restored
-    $(".modal").on('hide.bs.modal',function(e){
-        setObjectIdPopover();
-    });
+    setObjectIdTooltip();
 }
 
 // Custom tooltip function for object IDs

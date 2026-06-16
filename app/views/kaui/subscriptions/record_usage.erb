@@ -1,0 +1,126 @@
+<div class="register kaui-subscription-new">
+  <div class="">
+        <div class="mx-auto" style="max-width:  37.5rem;">
+            <h5 class="add-account-title border-bottom pb-3 mb-3">
+                <span class="icon-container">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M9.16675 11.6665H13.3334M6.66675 11.6665H6.67423M10.8334 14.9998H6.66675M13.3334 14.9998H13.3259" stroke="#414651" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M13.75 1.6665V4.99984M6.25 1.6665V4.99984" stroke="#414651" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M15.8333 3.3335H4.16667C3.24619 3.3335 2.5 4.07969 2.5 5.00016V16.6668C2.5 17.5873 3.24619 18.3335 4.16667 18.3335H15.8333C16.7538 18.3335 17.5 17.5873 17.5 16.6668V5.00016C17.5 4.07969 16.7538 3.3335 15.8333 3.3335Z" stroke="#414651" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M2.5 8.3335H17.5" stroke="#414651" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                Record Usage
+            </h5>
+
+            <p class="text-muted small mb-3">
+                Record usage for subscription
+                <strong><%= @subscription.plan_name %></strong>
+                (<code><%= @subscription.subscription_id %></code>).
+            </p>
+
+            <%= form_tag create_usage_path(@subscription.subscription_id), method: :post, id: 'record_usage_form', class: 'form-horizontal' do %>
+
+                <div class="form-group d-flex pb-3">
+                    <%= label_tag :unit_type, 'Unit Type', class: 'col-sm-3 control-label' %>
+                    <div class="col-sm-9">
+                        <%= text_field_tag :unit_type, @unit_type, required: true, maxlength: 255, class: 'form-control', placeholder: 'e.g. api-calls' %>
+                    </div>
+                </div>
+
+                <div class="form-group d-flex pb-3">
+                    <%= label_tag :amount, 'Amount', class: 'col-sm-3 control-label' %>
+                    <div class="col-sm-9">
+                        <%= number_field_tag :amount, @amount, required: true, min: 1, step: 1, class: 'form-control', placeholder: 'Positive integer' %>
+                    </div>
+                </div>
+
+                <div class="form-group d-flex pb-3">
+                    <%= label_tag :record_date, 'Date/Time of Usage', class: 'col-sm-3 control-label' %>
+                    <div class="col-sm-9">
+                        <%= text_field_tag :record_date,
+                                           @record_date.presence || Time.now.utc.iso8601,
+                                           required: true,
+                                           class: 'form-control',
+                                           placeholder: 'YYYY-MM-DDTHH:MM:SSZ (ISO 8601)' %>
+                        <small class="form-text text-muted">ISO 8601 format, e.g. <code>2026-06-13T15:30:00Z</code></small>
+                    </div>
+                </div>
+
+                <div class="form-group d-flex pb-3">
+                    <%= label_tag :tracking_id, 'Tracking ID', class: 'col-sm-3 control-label' %>
+                    <div class="col-sm-9">
+                        <%= text_field_tag :tracking_id, @tracking_id, maxlength: 255, class: 'form-control', placeholder: 'Optional, used for idempotency' %>
+                    </div>
+                </div>
+
+                <div class="form-group d-flex pb-3 border-bottom mb-3">
+                    <%= label_tag :reason, 'Reason', class: 'col-sm-3 control-label' %>
+                    <div class="col-sm-9">
+                        <%= text_field_tag :reason, params[:reason], class: 'form-control' %>
+                    </div>
+                </div>
+
+                <div class="form-group d-flex pb-3 border-bottom mb-3">
+                    <%= label_tag :comment, 'Comment', class: 'col-sm-3 control-label' %>
+                    <div class="col-sm-9">
+                        <%= text_field_tag :comment, params[:comment], class: 'form-control' %>
+                    </div>
+                </div>
+
+                <div class="form-group d-flex justify-content-end pb-3">
+                    <%= render "kaui/components/button/button", {
+                        label: 'Close',
+                        variant: "outline-secondary d-inline-flex align-items-center gap-1",
+                        type: "button",
+                        html_class: "kaui-button custom-hover mx-2",
+                        html_options: {
+                          id: "closeButton",
+                          onclick: "window.history.back();"
+                        }
+                    } %>
+                    <%= render "kaui/components/button/button", {
+                        label: 'Record Usage',
+                        variant: "outline-secondary d-inline-flex align-items-center gap-1",
+                        type: "submit",
+                        html_class: "kaui-dropdown custom-hover"
+                    } %>
+                </div>
+            <% end %>
+        </div>
+    </div>
+</div>
+
+<%= javascript_tag do %>
+  document.addEventListener('DOMContentLoaded', function () {
+    var form = document.getElementById('record_usage_form');
+    if (!form) { return; }
+    form.addEventListener('submit', function (e) {
+      var errors = [];
+
+      var unitType = (document.getElementById('unit_type').value || '').trim();
+      if (unitType.length === 0) {
+        errors.push('Unit type is required.');
+      }
+
+      var amountStr = (document.getElementById('amount').value || '').trim();
+      var amount = parseInt(amountStr, 10);
+      if (amountStr.length === 0 || isNaN(amount) || amount <= 0 || String(amount) !== amountStr) {
+        errors.push('Amount must be a positive integer.');
+      }
+
+      var dateStr = (document.getElementById('record_date').value || '').trim();
+      // Permissive ISO 8601 check
+      var isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
+      var parsed = Date.parse(dateStr);
+      if (dateStr.length === 0 || isNaN(parsed) || !isoRegex.test(dateStr)) {
+        errors.push('Date/time of usage must be a valid ISO 8601 timestamp (e.g. 2026-06-13T15:30:00Z).');
+      }
+
+      if (errors.length > 0) {
+        e.preventDefault();
+        alert(errors.join('\n'));
+      }
+    });
+  });
+<% end %>

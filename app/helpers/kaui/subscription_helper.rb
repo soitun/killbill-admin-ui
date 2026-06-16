@@ -189,6 +189,34 @@ module Kaui
       sub.present? and sub.billing_end_date.present?
     end
 
+    def subscription_has_usage?(sub, catalog = nil)
+      return false if sub.blank?
+
+      # First try the subscription's resolved per-phase prices
+      # (populated by GET /subscriptions/{id} but not by the bundles listing endpoint).
+      (sub.prices || []).each do |phase_price|
+        usage_prices = if phase_price.is_a?(Hash)
+                         phase_price['usagePrices'] || phase_price[:usagePrices] ||
+                           phase_price['usage_prices'] || phase_price[:usage_prices]
+                       elsif phase_price.respond_to?(:usage_prices)
+                         phase_price.usage_prices
+                       end
+        return true if usage_prices.present?
+      end
+
+      # Fall back to the catalog plan definition
+      return false if catalog.blank? || sub.plan_name.blank?
+
+      product = catalog.products&.find { |p| p.name == sub.product_name }
+      plan = product&.plans&.find { |p| p.name == sub.plan_name }
+      return false if plan.nil?
+
+      (plan.phases || []).any? do |phase|
+        usages = phase.respond_to?(:usages) ? phase.usages : nil
+        usages.present?
+      end
+    end
+
     def paging_button_class(num, current_page)
       num == current_page ? 'btn btn-primary' : 'btn btn-custom'
     end

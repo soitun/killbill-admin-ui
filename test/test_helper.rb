@@ -15,6 +15,7 @@ require 'rails/test_help'
 
 Rails.backtrace_cleaner.remove_silencers!
 
+require 'minitest/mock'
 require 'multi_json'
 
 # Include helpers

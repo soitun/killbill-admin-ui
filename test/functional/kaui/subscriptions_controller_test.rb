@@ -323,6 +323,185 @@ module Kaui
       assert_equal 'Subscription BCD was successfully changed', flash[:notice]
     end
 
+    test 'should get edit quantity' do
+      get :edit_quantity, params: { id: @bundle.subscriptions.first.subscription_id }
+      assert_response :success
+      assert_equal extract_value_from_input_field('subscription_account_id'), @bundle.subscriptions.first.account_id
+      assert_equal extract_value_from_input_field('effective_from_date'), Time.zone.today.strftime('%Y-%m-%d')
+    end
+
+    test 'should update quantity' do
+      bundle = create_bundle(@account, @tenant)
+      subscription_id = bundle.subscriptions.first.subscription_id
+      parameters = {
+        id: subscription_id,
+        subscription: { account_id: bundle.subscriptions.first.account_id,
+                        quantity: 2 },
+        effective_from_date: (Time.zone.today >> 1).to_s
+      }
+
+      put :update_quantity, params: parameters
+      assert_redirected_to account_bundles_path(bundle.subscriptions.first.account_id)
+      assert_equal 'Subscription quantity was successfully changed', flash[:notice]
+    end
+
+    test 'should coerce string quantity to integer' do
+      bundle = create_bundle(@account, @tenant)
+      parameters = {
+        id: bundle.subscriptions.first.subscription_id,
+        subscription: { account_id: bundle.subscriptions.first.account_id,
+                        quantity: '3' },
+        effective_from_date: (Time.zone.today >> 1).to_s
+      }
+
+      put :update_quantity, params: parameters
+      assert_redirected_to account_bundles_path(bundle.subscriptions.first.account_id)
+      assert_equal 'Subscription quantity was successfully changed', flash[:notice]
+    end
+
+    test 'should require subscription params on update quantity' do
+      put :update_quantity, params: { id: @bundle.subscriptions.first.subscription_id }
+      assert_redirected_to edit_quantity_path(@bundle.subscriptions.first.subscription_id)
+      assert_equal 'Required parameter missing: subscription', flash[:error]
+    end
+
+    test 'should get record usage form' do
+      get :record_usage, params: { id: @bundle.subscriptions.first.subscription_id }
+      assert_response :success
+      assert_not_nil assigns(:subscription)
+      assert_equal @bundle.subscriptions.first.subscription_id, assigns(:subscription).subscription_id
+    end
+
+    test 'should handle Kill Bill errors when loading record usage form' do
+      subscription_id = SecureRandom.uuid.to_s
+      get :record_usage, params: { id: subscription_id }
+      assert_redirected_to home_path
+      assert_equal "Error while communicating with the Kill Bill server: Object id=#{subscription_id} type=SUBSCRIPTION doesn't exist!", flash[:error]
+    end
+
+    test 'should require id when recording usage' do
+      assert_raises(ActionController::UrlGenerationError) do
+        post :create_usage, params: { unit_type: 'gallons', amount: 10, record_date: Time.now.utc.iso8601 }
+      end
+    end
+
+    test 'should reject record usage with missing unit type' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: '',
+             amount: 10,
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Unit type is required/, flash.now[:error])
+    end
+
+    test 'should reject record usage with non-positive amount' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: '0',
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Amount must be a positive integer/, flash.now[:error])
+    end
+
+    test 'should reject record usage with non-integer amount' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: '3.5',
+             record_date: Time.now.utc.iso8601
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Amount must be a positive integer/, flash.now[:error])
+    end
+
+    test 'should reject record usage with missing date' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: 10,
+             record_date: ''
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(%r{Date/time of usage is required}, flash.now[:error])
+    end
+
+    test 'should reject record usage with invalid date format' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: 'gallons',
+             amount: 10,
+             record_date: 'not-a-date'
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
+    end
+
+    test 'should report multiple validation errors at once' do
+      post :create_usage,
+           params: {
+             id: @bundle.subscriptions.first.subscription_id,
+             unit_type: '',
+             amount: '-1',
+             record_date: 'bogus'
+           }
+      assert_response :success
+      assert_template :record_usage
+      assert_match(/Unit type is required/, flash.now[:error])
+      assert_match(/Amount must be a positive integer/, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
+    end
+
+    test 'should record usage for a usage-based subscription' do
+      # Add a usage-based add-on (gas-monthly / gallons) to the existing Sports bundle
+      addon = Kaui::Subscription.new(account_id: @account.account_id,
+                                     bundle_id: @bundle.bundle_id,
+                                     plan_name: 'gas-monthly')
+      addon = addon.create('Kaui test', nil, nil, nil, false, build_options(@tenant))
+
+      post :create_usage,
+           params: {
+             id: addon.subscription_id,
+             unit_type: 'gallons',
+             amount: 42,
+             record_date: Time.now.utc.iso8601
+           }
+      assert_redirected_to account_bundles_path(@account.account_id)
+      assert_equal 'Usage was successfully recorded', flash[:notice]
+    end
+
+    test 'should display Kill Bill error when recording usage with unknown unit type' do
+      stub_usage = Struct.new(:subscription_id, :tracking_id, :unit_usage_records).new
+      stub_usage.define_singleton_method(:create) { |*| raise StandardError, 'Unknown unit type: no-such-unit' }
+
+      Kaui::Usage.stub(:new, stub_usage) do
+        post :create_usage,
+             params: {
+               id: @bundle.subscriptions.first.subscription_id,
+               unit_type: 'no-such-unit',
+               amount: 1,
+               record_date: Time.now.utc.iso8601
+             }
+      end
+      assert_response :success
+      assert_template :record_usage
+      assert_not_nil flash.now[:error]
+      assert_match(/Error while recording usage/, flash.now[:error])
+    end
+
     test 'should validate external key if found' do
       get :validate_external_key, params: { external_key: 'foo' }
       assert_response :success
@@ -378,6 +557,47 @@ module Kaui
       }
       post(:update_tags, params:)
       assert_response :found
+    end
+
+    test 'should return raw JSON for show_json' do
+      subscription_id = @bundle.subscriptions.first.subscription_id
+      get :show_json, params: { id: subscription_id }
+
+      assert_response :ok
+      assert_equal 'application/json', @response.media_type
+
+      body = JSON.parse(@response.body)
+      assert_equal subscription_id, body['subscriptionId']
+      assert_equal @bundle.bundle_id, body['bundleId']
+      assert_equal @account.account_id, body['accountId']
+    end
+
+    test 'show_json should delegate to find_raw_by_id and return its body verbatim' do
+      subscription_id = @bundle.subscriptions.first.subscription_id
+      raw_payload = "{\"subscriptionId\":\"#{subscription_id}\",\"note\":\"raw passthrough\"}"
+
+      Kaui::Subscription.stub(:find_raw_by_id, raw_payload) do
+        get :show_json, params: { id: subscription_id }
+      end
+
+      assert_response :ok
+      assert_equal 'application/json', @response.media_type
+      assert_equal raw_payload, @response.body
+    end
+
+    test 'show_json should surface Kill Bill errors with the original status code' do
+      missing_id = SecureRandom.uuid.to_s
+      get :show_json, params: { id: missing_id }
+
+      assert_response :not_found
+      body = JSON.parse(@response.body)
+      assert_includes body['message'].to_s, missing_id
+    end
+
+    test 'show_json should require an id' do
+      assert_raises(ActionController::UrlGenerationError) do
+        get :show_json, params: {}
+      end
     end
   end
 end
