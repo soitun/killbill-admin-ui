@@ -110,7 +110,7 @@ jobs:
           DB_PASSWORD: ${{ matrix.database-password }}
           DB_PORT: ${{ matrix.database-port }}
         run: |
-          gem update --system
+          gem update --system 3.5.22
           bundle exec rails db:migrate
           # Some flakiness unfortunately
           ./bin/retry bundle exec rails t -w -f
