@@ -189,6 +189,7 @@ module Kaui
 
     def record_usage
       @subscription = Kaui::Subscription.find_by_id(params.require(:id), 'NONE', options_for_klient)
+      @unit_types = fetch_unit_types_from_subscription(@subscription)
     end
 
     def create_usage
@@ -204,16 +205,13 @@ module Kaui
       amount = Integer(amount_raw, exception: false)
       errors << 'Amount must be a positive integer' if amount.nil? || amount <= 0
       errors << 'Date/time of usage is required' if record_date.blank?
-      parsed_date = begin
-        record_date.blank? ? nil : Time.iso8601(record_date)
-      rescue ArgumentError
-        nil
-      end
-      errors << 'Date/time of usage must be a valid ISO 8601 timestamp' if record_date.present? && parsed_date.nil?
+      parsed_date = parse_usage_date(record_date) unless record_date.blank?
+      errors << 'Date/time of usage must be a valid date or datetime' if record_date.present? && parsed_date.nil?
 
       if errors.any?
         flash.now[:error] = errors.join('. ')
         @subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        @unit_types = fetch_unit_types_from_subscription(@subscription)
         @unit_type = unit_type
         @amount = amount_raw
         @record_date = record_date
@@ -235,7 +233,7 @@ module Kaui
         usage.tracking_id = params[:tracking_id].presence
         usage.unit_usage_records = [unit_usage_record]
 
-        usage.create(current_user.kb_username, params[:reason], params[:comment], options_for_klient)
+        usage.create(current_user.kb_username, nil, nil, options_for_klient)
 
         subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
         redirect_to kaui_engine.account_bundles_path(subscription.account_id), notice: 'Usage was successfully recorded'
@@ -244,6 +242,7 @@ module Kaui
         Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
         flash.now[:error] = "Error while recording usage: #{as_string(e)}"
         @subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        @unit_types = fetch_unit_types_from_subscription(@subscription)
         @unit_type = unit_type
         @amount = amount_raw
         @record_date = record_date
@@ -370,6 +369,64 @@ module Kaui
       overrides << override
 
       overrides
+    end
+
+    def fetch_unit_types_from_subscription(subscription)
+      unit_types = []
+      (subscription.prices || []).each do |phase_price|
+        usage_prices = if phase_price.is_a?(Hash)
+                         phase_price['usagePrices'] || phase_price[:usagePrices] || []
+                       elsif phase_price.respond_to?(:usage_prices)
+                         phase_price.usage_prices || []
+                       else
+                         []
+                       end
+        (usage_prices || []).each do |usage_price|
+          tier_prices = if usage_price.is_a?(Hash)
+                           usage_price['tierPrices'] || usage_price[:tierPrices] || []
+                         elsif usage_price.respond_to?(:tier_prices)
+                           usage_price.tier_prices || []
+                         else
+                           []
+                         end
+          (tier_prices || []).each do |tier_price|
+            block_prices = if tier_price.is_a?(Hash)
+                               tier_price['blockPrices'] || tier_price[:blockPrices] || []
+                             elsif tier_price.respond_to?(:block_prices)
+                               tier_price.block_prices || []
+                             else
+                               []
+                             end
+            (block_prices || []).each do |block_price|
+              unit_name = if block_price.is_a?(Hash)
+                              block_price['unitName'] || block_price[:unitName] || block_price['unit_name']
+                            elsif block_price.respond_to?(:unit_name)
+                              block_price.unit_name
+                            end
+              unit_types << unit_name if unit_name.present?
+            end
+          end
+        end
+      end
+      unit_types.uniq
+    rescue StandardError
+      []
+    end
+
+    def parse_usage_date(str)
+      str = str.to_s.strip
+      return nil if str.empty?
+
+      if str.match?(/^\d{4}-\d{2}-\d{2}$/)
+        year, month, day = str.split('-').map(&:to_i)
+        Time.utc(year, month, day)
+      elsif str.match?(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+        Time.iso8601("#{str}:00Z")
+      else
+        Time.iso8601(str)
+      end
+    rescue ArgumentError
+      nil
     end
   end
 end

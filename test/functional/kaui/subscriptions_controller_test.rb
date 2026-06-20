@@ -447,7 +447,7 @@ module Kaui
            }
       assert_response :success
       assert_template :record_usage
-      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid date or datetime}, flash.now[:error])
     end
 
     test 'should report multiple validation errors at once' do
@@ -462,7 +462,7 @@ module Kaui
       assert_template :record_usage
       assert_match(/Unit type is required/, flash.now[:error])
       assert_match(/Amount must be a positive integer/, flash.now[:error])
-      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid date or datetime}, flash.now[:error])
     end
 
     test 'should record usage for a usage-based subscription' do

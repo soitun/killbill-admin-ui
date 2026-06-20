@@ -24,7 +24,13 @@
                 <div class="form-group d-flex pb-3">
                     <%= label_tag :unit_type, 'Unit Type', class: 'col-sm-3 control-label' %>
                     <div class="col-sm-9">
-                        <%= text_field_tag :unit_type, @unit_type, required: true, maxlength: 255, class: 'form-control', placeholder: 'e.g. api-calls' %>
+                        <% if @unit_types.length == 1 %>
+                            <%= text_field_tag :unit_type, @unit_types.first, readonly: true, required: true, class: 'form-control bg-light' %>
+                        <% elsif @unit_types.length > 1 %>
+                            <%= select_tag :unit_type, options_for_select(@unit_types.map { |u| [u, u] }, @unit_type.presence || @unit_types.first), required: true, class: 'form-select' %>
+                        <% else %>
+                            <%= text_field_tag :unit_type, @unit_type, required: true, maxlength: 255, class: 'form-control', placeholder: 'e.g. api-calls' %>
+                        <% end %>
                     </div>
                 </div>
 
@@ -38,12 +44,11 @@
                 <div class="form-group d-flex pb-3">
                     <%= label_tag :record_date, 'Date/Time of Usage', class: 'col-sm-3 control-label' %>
                     <div class="col-sm-9">
-                        <%= text_field_tag :record_date,
-                                           @record_date.presence || Time.now.utc.iso8601,
-                                           required: true,
-                                           class: 'form-control',
-                                           placeholder: 'YYYY-MM-DDTHH:MM:SSZ (ISO 8601)' %>
-                        <small class="form-text text-muted">ISO 8601 format, e.g. <code>2026-06-13T15:30:00Z</code></small>
+                        <%= datetime_field_tag :record_date,
+                                               @record_date.presence || Time.now.utc.strftime('%Y-%m-%dT%H:%M'),
+                                               required: true,
+                                               class: 'form-control' %>
+                        <small class="form-text text-muted">Date and time treated as UTC</small>
                     </div>
                 </div>
 
@@ -51,20 +56,6 @@
                     <%= label_tag :tracking_id, 'Tracking ID', class: 'col-sm-3 control-label' %>
                     <div class="col-sm-9">
                         <%= text_field_tag :tracking_id, @tracking_id, maxlength: 255, class: 'form-control', placeholder: 'Optional, used for idempotency' %>
-                    </div>
-                </div>
-
-                <div class="form-group d-flex pb-3 border-bottom mb-3">
-                    <%= label_tag :reason, 'Reason', class: 'col-sm-3 control-label' %>
-                    <div class="col-sm-9">
-                        <%= text_field_tag :reason, params[:reason], class: 'form-control' %>
-                    </div>
-                </div>
-
-                <div class="form-group d-flex pb-3 border-bottom mb-3">
-                    <%= label_tag :comment, 'Comment', class: 'col-sm-3 control-label' %>
-                    <div class="col-sm-9">
-                        <%= text_field_tag :comment, params[:comment], class: 'form-control' %>
                     </div>
                 </div>
 
@@ -98,7 +89,8 @@
     form.addEventListener('submit', function (e) {
       var errors = [];
 
-      var unitType = (document.getElementById('unit_type').value || '').trim();
+      var unitTypeEl = document.getElementById('unit_type');
+      var unitType = unitTypeEl ? (unitTypeEl.value || '').trim() : '';
       if (unitType.length === 0) {
         errors.push('Unit type is required.');
       }
@@ -107,14 +99,6 @@
       var amount = parseInt(amountStr, 10);
       if (amountStr.length === 0 || isNaN(amount) || amount <= 0 || String(amount) !== amountStr) {
         errors.push('Amount must be a positive integer.');
-      }
-
-      var dateStr = (document.getElementById('record_date').value || '').trim();
-      // Permissive ISO 8601 check
-      var isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
-      var parsed = Date.parse(dateStr);
-      if (dateStr.length === 0 || isNaN(parsed) || !isoRegex.test(dateStr)) {
-        errors.push('Date/time of usage must be a valid ISO 8601 timestamp (e.g. 2026-06-13T15:30:00Z).');
       }
 
       if (errors.length > 0) {
