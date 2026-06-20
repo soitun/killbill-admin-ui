@@ -61,9 +61,9 @@
           <% end %>
 
           
-          <% if @bundles.empty? %>
+          <% if @bundles.empty? && @search_query.present? %>
             <div class="custom-alert custom-alert-info mt-3">
-              <span>No bundles found<%= @search_query.present? ? " for the given search query." : "." %></span>
+              <span>No bundles found for the given search query.</span>
             </div>
           <% end %>
 
