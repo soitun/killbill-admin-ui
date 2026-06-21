@@ -205,7 +205,7 @@ module Kaui
       amount = Integer(amount_raw, exception: false)
       errors << 'Amount must be a positive integer' if amount.nil? || amount <= 0
       errors << 'Date/time of usage is required' if record_date.blank?
-      parsed_date = parse_usage_date(record_date) unless record_date.blank?
+      parsed_date = parse_usage_date(record_date) if record_date.present?
       errors << 'Date/time of usage must be a valid date or datetime' if record_date.present? && parsed_date.nil?
 
       if errors.any?
@@ -383,26 +383,26 @@ module Kaui
                        end
         (usage_prices || []).each do |usage_price|
           tier_prices = if usage_price.is_a?(Hash)
-                           usage_price['tierPrices'] || usage_price[:tierPrices] || []
-                         elsif usage_price.respond_to?(:tier_prices)
-                           usage_price.tier_prices || []
-                         else
-                           []
-                         end
+                          usage_price['tierPrices'] || usage_price[:tierPrices] || []
+                        elsif usage_price.respond_to?(:tier_prices)
+                          usage_price.tier_prices || []
+                        else
+                          []
+                        end
           (tier_prices || []).each do |tier_price|
             block_prices = if tier_price.is_a?(Hash)
-                               tier_price['blockPrices'] || tier_price[:blockPrices] || []
-                             elsif tier_price.respond_to?(:block_prices)
-                               tier_price.block_prices || []
-                             else
-                               []
-                             end
+                             tier_price['blockPrices'] || tier_price[:blockPrices] || []
+                           elsif tier_price.respond_to?(:block_prices)
+                             tier_price.block_prices || []
+                           else
+                             []
+                           end
             (block_prices || []).each do |block_price|
               unit_name = if block_price.is_a?(Hash)
-                              block_price['unitName'] || block_price[:unitName] || block_price['unit_name']
-                            elsif block_price.respond_to?(:unit_name)
-                              block_price.unit_name
-                            end
+                            block_price['unitName'] || block_price[:unitName] || block_price['unit_name']
+                          elsif block_price.respond_to?(:unit_name)
+                            block_price.unit_name
+                          end
               unit_types << unit_name if unit_name.present?
             end
           end
