@@ -14,6 +14,7 @@ module Kaui
 
       @bundle, plans_details = lookup_bundle_and_plan_details(@subscription, @base_product_name)
       @plans = plans_details.map(&:plan)
+      @plan_phases = build_plan_phases_map(plans_details)
 
       return unless @plans.empty?
 
@@ -30,6 +31,7 @@ module Kaui
       _, plans_details = lookup_bundle_and_plan_details(@subscription)
       # Use a Set to deal with multiple pricelists
       @plans = Set.new.merge(plans_details.map(&:plan))
+      @plan_phases = build_plan_phases_map(plans_details)
     end
 
     def create
@@ -46,15 +48,7 @@ module Kaui
         @subscription.plan_name = plan_name
         requested_date = params[:type_change] == 'DATE' ? params[:requested_date].presence : nil
 
-        # price override?
-        override_fixed_price = begin
-          plan_details.phases.first.prices.blank?
-        rescue StandardError
-          false
-        end
-        override_recurring_price = !override_fixed_price
-        phase_type = @bundle.nil? ? plan_details.phases.first.type : @bundle.subscriptions.first.phase_type
-        overrides = price_overrides(phase_type, override_fixed_price, override_recurring_price)
+        overrides = price_overrides(plan_details)
         @subscription.price_overrides = overrides if overrides.present?
         @subscription.quantity = params[:quantity].to_i if params[:quantity].present? && params[:quantity].to_i.positive?
 
@@ -95,11 +89,9 @@ module Kaui
 
       input = { planName: plan_name }
 
-      # price override?
-      current_plan = subscription.prices.select { |price| price['phaseType'] == subscription.phase_type }
-      override_fixed_price = current_plan.last['recurringPrice'].nil?
-      override_recurring_price = !override_fixed_price
-      overrides = price_overrides(subscription.phase_type, override_fixed_price, override_recurring_price)
+      _, plans_details = lookup_bundle_and_plan_details(subscription)
+      plan_details = plans_details.find { |p| p.plan == plan_name }
+      overrides = plan_details ? price_overrides(plan_details) : nil
       input[:priceOverrides] = overrides if overrides.present?
 
       subscription.change_plan(input,
@@ -356,19 +348,57 @@ module Kaui
       plans
     end
 
-    def price_overrides(phase_type, override_fixed_price, override_recurring_price)
-      return nil if params[:price_override].blank? || params[:price_override].to_i.negative?
+    def price_overrides(plan_details)
+      raw = params[:price_overrides]
+      return nil if raw.blank?
 
-      price_override = params[:price_override]
-      overrides = []
-      override = KillBillClient::Model::PhasePriceAttributes.new
-      override.phase_type = phase_type
-      override.fixed_price = price_override if override_fixed_price
-      override.recurring_price = price_override if override_recurring_price
+      entries = raw.respond_to?(:values) ? raw.values : Array(raw)
+      phase_meta = (plan_details.phases || []).index_by(&:type)
 
-      overrides << override
+      overrides = entries.filter_map do |entry|
+        entry = entry.to_unsafe_h if entry.respond_to?(:to_unsafe_h)
+        entry = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
 
-      overrides
+        price = entry[:price].to_s.strip
+        phase_type = entry[:phase_type].to_s.strip
+        next if price.blank? || phase_type.blank? || price.to_f.negative?
+
+        phase = phase_meta[phase_type]
+        next if phase.nil?
+
+        override = KillBillClient::Model::PhasePriceAttributes.new
+        override.phase_type = phase_type
+        if phase_uses_fixed_price?(phase)
+          override.fixed_price = price
+        else
+          override.recurring_price = price
+        end
+        override
+      end
+
+      overrides.presence
+    end
+
+    def build_plan_phases_map(plans_details)
+      (plans_details || []).to_h do |pd|
+        phases = (pd.phases || []).map do |ph|
+          fixed = phase_uses_fixed_price?(ph)
+          prices = ph.prices || []
+          price_label = if fixed
+                          '$0.00'
+                        elsif prices.any?
+                          format('$%.2f', prices.first.value.to_f)
+                        else
+                          ''
+                        end
+          { type: ph.type, fixed: fixed, priceLabel: price_label }
+        end
+        [pd.plan, phases]
+      end
+    end
+
+    def phase_uses_fixed_price?(phase)
+      (phase.prices || []).empty?
     end
 
     def fetch_unit_types_from_subscription(subscription)
