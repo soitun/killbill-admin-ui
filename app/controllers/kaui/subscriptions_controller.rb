@@ -359,9 +359,16 @@ module Kaui
         entry = entry.to_unsafe_h if entry.respond_to?(:to_unsafe_h)
         entry = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
 
-        price = entry[:price].to_s.strip
+        price_str = entry[:price].to_s.strip
         phase_type = entry[:phase_type].to_s.strip
-        next if price.blank? || phase_type.blank? || price.to_f.negative?
+
+        price = begin
+          BigDecimal(price_str)
+        rescue ArgumentError
+          nil
+        end
+
+        next if price.nil? || phase_type.blank? || price.negative?
 
         phase = phase_meta[phase_type]
         next if phase.nil?
@@ -369,9 +376,9 @@ module Kaui
         override = KillBillClient::Model::PhasePriceAttributes.new
         override.phase_type = phase_type
         if phase_uses_fixed_price?(phase)
-          override.fixed_price = price
+          override.fixed_price = price.to_s('F')
         else
-          override.recurring_price = price
+          override.recurring_price = price.to_s('F')
         end
         override
       end
@@ -439,7 +446,8 @@ module Kaui
         end
       end
       unit_types.uniq
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("Failed to extract unit types from subscription #{subscription&.subscription_id}: #{e.class}: #{e.message}")
       []
     end
 
