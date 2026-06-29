@@ -15,7 +15,7 @@
       </div>
       <div class="col-sm-9" id="phase_overrides_section">
         <p class="text-muted mb-2" style="font-size: 13px;">Override prices for specific phases. All other phases will use catalog pricing.</p>
-        <div id="phase_overrides_headers" class="d-flex mb-1 gap-2" style="display: none !important;">
+        <div id="phase_overrides_headers" class="d-flex mb-1 gap-2" style="display: none;">
           <div style="flex: 1; padding-left: 2px;"><small><strong>Phase</strong></small></div>
           <div style="flex: 1; padding-left: 2px;">
             <small><strong>Override Price</strong></small>
@@ -31,7 +31,7 @@
           style="border: 1px dashed #d0d5dd; background: white; color: #2563eb; font-size: 14px;">
           <span style="font-size: 16px; line-height: 1;">+</span> Add another phase
         </button>
-        <script type="application/json" id="plan_phases_data"><%= raw (@plan_phases || {}).to_json %></script>
+        <script type="application/json" id="plan_phases_data"><%= raw json_escape((@plan_phases || {}).to_json) %></script>
         <style>.phase-override-remove:hover svg path { stroke: #D92D20; }</style>
         <template id="phase_override_row_template">
           <div class="phase-override-row d-flex align-items-center mb-2 gap-2">

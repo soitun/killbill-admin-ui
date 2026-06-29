@@ -362,11 +362,7 @@ module Kaui
         price_str = entry[:price].to_s.strip
         phase_type = entry[:phase_type].to_s.strip
 
-        price = begin
-          BigDecimal(price_str)
-        rescue ArgumentError
-          nil
-        end
+        price = BigDecimal(price_str, exception: false)
 
         next if price.nil? || phase_type.blank? || price.negative?
 
