@@ -14,6 +14,7 @@ module Kaui
 
       @bundle, plans_details = lookup_bundle_and_plan_details(@subscription, @base_product_name)
       @plans = plans_details.map(&:plan)
+      @plan_phases = build_plan_phases_map(plans_details)
 
       return unless @plans.empty?
 
@@ -30,6 +31,7 @@ module Kaui
       _, plans_details = lookup_bundle_and_plan_details(@subscription)
       # Use a Set to deal with multiple pricelists
       @plans = Set.new.merge(plans_details.map(&:plan))
+      @plan_phases = build_plan_phases_map(plans_details)
     end
 
     def create
@@ -46,15 +48,7 @@ module Kaui
         @subscription.plan_name = plan_name
         requested_date = params[:type_change] == 'DATE' ? params[:requested_date].presence : nil
 
-        # price override?
-        override_fixed_price = begin
-          plan_details.phases.first.prices.blank?
-        rescue StandardError
-          false
-        end
-        override_recurring_price = !override_fixed_price
-        phase_type = @bundle.nil? ? plan_details.phases.first.type : @bundle.subscriptions.first.phase_type
-        overrides = price_overrides(phase_type, override_fixed_price, override_recurring_price)
+        overrides = price_overrides(plan_details)
         @subscription.price_overrides = overrides if overrides.present?
         @subscription.quantity = params[:quantity].to_i if params[:quantity].present? && params[:quantity].to_i.positive?
 
@@ -95,11 +89,9 @@ module Kaui
 
       input = { planName: plan_name }
 
-      # price override?
-      current_plan = subscription.prices.select { |price| price['phaseType'] == subscription.phase_type }
-      override_fixed_price = current_plan.last['recurringPrice'].nil?
-      override_recurring_price = !override_fixed_price
-      overrides = price_overrides(subscription.phase_type, override_fixed_price, override_recurring_price)
+      _, plans_details = lookup_bundle_and_plan_details(subscription)
+      plan_details = plans_details.find { |p| p.plan == plan_name }
+      overrides = plan_details ? price_overrides(plan_details) : nil
       input[:priceOverrides] = overrides if overrides.present?
 
       subscription.change_plan(input,
@@ -189,6 +181,7 @@ module Kaui
 
     def record_usage
       @subscription = Kaui::Subscription.find_by_id(params.require(:id), 'NONE', options_for_klient)
+      @unit_types = fetch_unit_types_from_subscription(@subscription)
     end
 
     def create_usage
@@ -204,16 +197,13 @@ module Kaui
       amount = Integer(amount_raw, exception: false)
       errors << 'Amount must be a positive integer' if amount.nil? || amount <= 0
       errors << 'Date/time of usage is required' if record_date.blank?
-      parsed_date = begin
-        record_date.blank? ? nil : Time.iso8601(record_date)
-      rescue ArgumentError
-        nil
-      end
-      errors << 'Date/time of usage must be a valid ISO 8601 timestamp' if record_date.present? && parsed_date.nil?
+      parsed_date = parse_usage_date(record_date) if record_date.present?
+      errors << 'Date/time of usage must be a valid date or datetime' if record_date.present? && parsed_date.nil?
 
       if errors.any?
         flash.now[:error] = errors.join('. ')
         @subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        @unit_types = fetch_unit_types_from_subscription(@subscription)
         @unit_type = unit_type
         @amount = amount_raw
         @record_date = record_date
@@ -235,7 +225,7 @@ module Kaui
         usage.tracking_id = params[:tracking_id].presence
         usage.unit_usage_records = [unit_usage_record]
 
-        usage.create(current_user.kb_username, params[:reason], params[:comment], options_for_klient)
+        usage.create(current_user.kb_username, nil, nil, options_for_klient)
 
         subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
         redirect_to kaui_engine.account_bundles_path(subscription.account_id), notice: 'Usage was successfully recorded'
@@ -244,6 +234,7 @@ module Kaui
         Rails.logger.error(e.backtrace.join("\n")) if e.backtrace
         flash.now[:error] = "Error while recording usage: #{as_string(e)}"
         @subscription = Kaui::Subscription.find_by_id(subscription_id, 'NONE', options_for_klient)
+        @unit_types = fetch_unit_types_from_subscription(@subscription)
         @unit_type = unit_type
         @amount = amount_raw
         @record_date = record_date
@@ -357,19 +348,119 @@ module Kaui
       plans
     end
 
-    def price_overrides(phase_type, override_fixed_price, override_recurring_price)
-      return nil if params[:price_override].blank? || params[:price_override].to_i.negative?
+    def price_overrides(plan_details)
+      raw = params[:price_overrides]
+      return nil if raw.blank?
 
-      price_override = params[:price_override]
-      overrides = []
-      override = KillBillClient::Model::PhasePriceAttributes.new
-      override.phase_type = phase_type
-      override.fixed_price = price_override if override_fixed_price
-      override.recurring_price = price_override if override_recurring_price
+      entries = raw.respond_to?(:values) ? raw.values : Array(raw)
+      phase_meta = (plan_details.phases || []).index_by(&:type)
 
-      overrides << override
+      overrides = entries.filter_map do |entry|
+        entry = entry.to_unsafe_h if entry.respond_to?(:to_unsafe_h)
+        entry = entry.with_indifferent_access if entry.respond_to?(:with_indifferent_access)
 
-      overrides
+        price_str = entry[:price].to_s.strip
+        phase_type = entry[:phase_type].to_s.strip
+
+        price = BigDecimal(price_str, exception: false)
+
+        next if price.nil? || phase_type.blank? || price.negative?
+
+        phase = phase_meta[phase_type]
+        next if phase.nil?
+
+        override = KillBillClient::Model::PhasePriceAttributes.new
+        override.phase_type = phase_type
+        if phase_uses_fixed_price?(phase)
+          override.fixed_price = price.to_s('F')
+        else
+          override.recurring_price = price.to_s('F')
+        end
+        override
+      end
+
+      overrides.presence
+    end
+
+    def build_plan_phases_map(plans_details)
+      (plans_details || []).to_h do |pd|
+        phases = (pd.phases || []).map do |ph|
+          fixed = phase_uses_fixed_price?(ph)
+          prices = ph.prices || []
+          price_label = if fixed
+                          '$0.00'
+                        elsif prices.any?
+                          format('$%.2f', prices.first.value.to_f)
+                        else
+                          ''
+                        end
+          { type: ph.type, fixed: fixed, priceLabel: price_label }
+        end
+        [pd.plan, phases]
+      end
+    end
+
+    def phase_uses_fixed_price?(phase)
+      (phase.prices || []).empty?
+    end
+
+    def fetch_unit_types_from_subscription(subscription)
+      unit_types = []
+      (subscription.prices || []).each do |phase_price|
+        usage_prices = if phase_price.is_a?(Hash)
+                         phase_price['usagePrices'] || phase_price[:usagePrices] || []
+                       elsif phase_price.respond_to?(:usage_prices)
+                         phase_price.usage_prices || []
+                       else
+                         []
+                       end
+        (usage_prices || []).each do |usage_price|
+          tier_prices = if usage_price.is_a?(Hash)
+                          usage_price['tierPrices'] || usage_price[:tierPrices] || []
+                        elsif usage_price.respond_to?(:tier_prices)
+                          usage_price.tier_prices || []
+                        else
+                          []
+                        end
+          (tier_prices || []).each do |tier_price|
+            block_prices = if tier_price.is_a?(Hash)
+                             tier_price['blockPrices'] || tier_price[:blockPrices] || []
+                           elsif tier_price.respond_to?(:block_prices)
+                             tier_price.block_prices || []
+                           else
+                             []
+                           end
+            (block_prices || []).each do |block_price|
+              unit_name = if block_price.is_a?(Hash)
+                            block_price['unitName'] || block_price[:unitName] || block_price['unit_name']
+                          elsif block_price.respond_to?(:unit_name)
+                            block_price.unit_name
+                          end
+              unit_types << unit_name if unit_name.present?
+            end
+          end
+        end
+      end
+      unit_types.uniq
+    rescue StandardError => e
+      Rails.logger.warn("Failed to extract unit types from subscription #{subscription&.subscription_id}: #{e.class}: #{e.message}")
+      []
+    end
+
+    def parse_usage_date(str)
+      str = str.to_s.strip
+      return nil if str.empty?
+
+      if str.match?(/^\d{4}-\d{2}-\d{2}$/)
+        year, month, day = str.split('-').map(&:to_i)
+        Time.utc(year, month, day)
+      elsif str.match?(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+        Time.iso8601("#{str}:00Z")
+      else
+        Time.iso8601(str)
+      end
+    rescue ArgumentError
+      nil
     end
   end
 end

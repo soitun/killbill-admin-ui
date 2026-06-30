@@ -447,7 +447,7 @@ module Kaui
            }
       assert_response :success
       assert_template :record_usage
-      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid date or datetime}, flash.now[:error])
     end
 
     test 'should report multiple validation errors at once' do
@@ -462,7 +462,7 @@ module Kaui
       assert_template :record_usage
       assert_match(/Unit type is required/, flash.now[:error])
       assert_match(/Amount must be a positive integer/, flash.now[:error])
-      assert_match(%r{Date/time of usage must be a valid ISO 8601 timestamp}, flash.now[:error])
+      assert_match(%r{Date/time of usage must be a valid date or datetime}, flash.now[:error])
     end
 
     test 'should record usage for a usage-based subscription' do
@@ -517,7 +517,7 @@ module Kaui
            params: {
              id: @bundle.subscriptions.first.subscription_id,
              plan_name: 'super-monthly',
-             price_override: 500
+             price_overrides: [{ phase_type: 'EVERGREEN', price: 500 }]
            }
       assert_redirected_to account_bundles_path(@bundle.subscriptions.first.account_id)
       assert_equal 'Subscription plan successfully changed', flash[:notice]
@@ -530,7 +530,25 @@ module Kaui
                account_id: @account.account_id,
                external_key: SecureRandom.uuid
              },
-             price_override: 500,
+             price_overrides: [{ phase_type: 'EVERGREEN', price: 500 }],
+             plan_name: 'standard-monthly'
+           }
+
+      assert_redirected_to account_bundles_path(@account.account_id)
+      assert_equal 'Subscription was successfully created', flash[:notice]
+    end
+
+    test 'should create with multi-phase price overrides' do
+      post :create,
+           params: {
+             subscription: {
+               account_id: @account.account_id,
+               external_key: SecureRandom.uuid
+             },
+             price_overrides: [
+               { phase_type: 'TRIAL', price: 0 },
+               { phase_type: 'EVERGREEN', price: 750 }
+             ],
              plan_name: 'standard-monthly'
            }
 

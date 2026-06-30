@@ -45,10 +45,7 @@
       type: "button",
       html_class: "kaui-button custom-hover",
       html_options: {
-        id: "dropdownMenu1",
-        data: {
-          bs_toggle: "dropdown"
-        }
+        id: "dropdownMenu1"
       }
     } %>
     <ul class="dropdown-menu" id="column-visibility" aria-labelledby="dropdownMenu1">
@@ -213,13 +210,15 @@
 
 <%= javascript_tag do %>
 $(document).ready(function() {
-  // Initialize Bootstrap dropdown
-  var dropdownElementList = [].slice.call(document.querySelectorAll('.dropdown-toggle'));
-  var dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
-    return new bootstrap.Dropdown(dropdownToggleEl);
+  // Toggle Edit Columns dropdown
+  $('#dropdownMenu1').on('click', function(e) {
+    e.stopPropagation();
+    var $menu = $('#column-visibility');
+    $menu.toggleClass('show');
+    $(this).attr('aria-expanded', $menu.hasClass('show'));
   });
 
-  $('.dropdown-menu').on('click', 'input[type="checkbox"], label', function(event) {
+  $('#column-visibility').on('click', 'input[type="checkbox"], label', function(event) {
     event.stopPropagation();
   });
 

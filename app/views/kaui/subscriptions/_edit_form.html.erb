@@ -7,9 +7,49 @@
     </div>
 
     <div class="form-group d-flex pb-3 border-bottom mb-3">
-      <%= label_tag :price_override, 'Price Override', :class => 'col-sm-3 control-label' %>
-      <div class="col-sm-9">
-        <%= number_field_tag :price_override, nil, min: 0, :step => :any, :class => 'form-control' %>
+      <div class="col-sm-3 control-label" style="padding-top: 2px;">
+        <div id="toggle_phase_overrides" style="cursor: pointer; user-select: none;">
+          <span id="toggle_phase_overrides_caret">&#9662;</span>
+          <strong>Phase Overrides</strong>
+        </div>
+      </div>
+      <div class="col-sm-9" id="phase_overrides_section">
+        <p class="text-muted mb-2" style="font-size: 13px;">Override prices for specific phases. All other phases will use catalog pricing.</p>
+        <div id="phase_overrides_headers" class="d-flex mb-1 gap-2" style="display: none;">
+          <div style="flex: 1; padding-left: 2px;"><small><strong>Phase</strong></small></div>
+          <div style="flex: 1; padding-left: 2px;">
+            <small><strong>Override Price</strong></small>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 3px;" title="Leave blank to use catalog pricing">
+              <circle cx="8" cy="8" r="7" stroke="#A4A7AE" stroke-width="1.25"/>
+              <path d="M8 7v5M8 5.5v-.5" stroke="#A4A7AE" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div style="width: 40px;"></div>
+        </div>
+        <div id="phase_overrides_rows"></div>
+        <button type="button" id="add_phase_override" class="btn w-100 mt-2 d-flex align-items-center justify-content-center gap-1"
+          style="border: 1px dashed #d0d5dd; background: white; color: #2563eb; font-size: 14px;">
+          <span style="font-size: 16px; line-height: 1;">+</span> Add another phase
+        </button>
+        <script type="application/json" id="plan_phases_data"><%= raw json_escape((@plan_phases || {}).to_json) %></script>
+        <style>.phase-override-remove:hover svg path { stroke: #D92D20; }</style>
+        <template id="phase_override_row_template">
+          <div class="phase-override-row d-flex align-items-center mb-2 gap-2">
+            <select name="price_overrides[][phase_type]" class="form-control phase-override-type" style="flex: 1;"></select>
+            <div class="input-group phase-override-price-group" style="flex: 1;">
+              <span class="input-group-text">$</span>
+              <input type="number" name="price_overrides[][price]" step="any" min="0" placeholder="0.00" class="form-control phase-override-price">
+            </div>
+            <button type="button" class="btn btn-outline-secondary phase-override-remove" style="padding: 6px 10px; flex-shrink: 0;" aria-label="Remove">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 3.66699L12.4093 13.4143C12.3666 14.1181 11.7834 14.667 11.0783 14.667H4.92164C4.21659 14.667 3.6334 14.1181 3.59075 13.4143L3 3.66699" stroke="#A4A7AE" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 3.66634H5.33333M5.33333 3.66634L6.16017 1.73706C6.26522 1.49194 6.50625 1.33301 6.77293 1.33301H9.22707C9.49373 1.33301 9.7348 1.49194 9.8398 1.73706L10.6667 3.66634M5.33333 3.66634H10.6667M14 3.66634H10.6667" stroke="#A4A7AE" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6.33325 11V7" stroke="#A4A7AE" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9.66675 11V7" stroke="#A4A7AE" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </template>
       </div>
     </div>
     <div class="form-group d-flex pb-3" id="radio_group">
@@ -106,5 +146,99 @@ $(document).ready(function() {
     $( "input[type=radio]").on("click", function() {
         onTypeChange();
     });
+    initPhaseOverrides();
 });
+
+function initPhaseOverrides() {
+    var planPhases = {};
+    try { planPhases = JSON.parse($('#plan_phases_data').text() || '{}'); } catch (e) { planPhases = {}; }
+
+    var $section = $('#phase_overrides_section');
+    var $rows = $('#phase_overrides_rows');
+    var $addBtn = $('#add_phase_override');
+    var $headers = $('#phase_overrides_headers');
+    var $template = $('#phase_override_row_template');
+    var $planSelect = $('select[name="plan_name"]');
+
+    function currentPhases() {
+        return planPhases[$planSelect.val()] || [];
+    }
+
+    function phaseLabel(p) {
+        var title = p.type.charAt(0) + p.type.slice(1).toLowerCase();
+        return p.priceLabel ? title + ' (' + p.priceLabel + ')' : title;
+    }
+
+    function selectedTypes($exceptRow) {
+        return $rows.find('.phase-override-row').filter(function() {
+            return !$exceptRow || this !== $exceptRow[0];
+        }).map(function() { return $(this).find('.phase-override-type').val(); }).get();
+    }
+
+    function refreshAddBtn() {
+        var phases = currentPhases();
+        var used = selectedTypes();
+        var hasMore = phases.length > 0 && used.length < phases.length;
+        $addBtn.toggle(hasMore);
+        $headers.css('display', $rows.find('.phase-override-row').length > 0 ? 'flex' : 'none');
+    }
+
+    function rebuildRowOptions() {
+        var phases = currentPhases();
+        $rows.find('.phase-override-row').each(function() {
+            var $row = $(this);
+            var $select = $row.find('.phase-override-type');
+            var current = $select.val();
+            var used = selectedTypes($row);
+            $select.empty();
+            phases.forEach(function(p) {
+                if (used.indexOf(p.type) === -1) {
+                    $select.append($('<option>', { value: p.type, text: phaseLabel(p) }));
+                }
+            });
+            var currentStillValid = phases.some(function(p) { return p.type === current; }) && used.indexOf(current) === -1;
+            if (currentStillValid) $select.val(current);
+        });
+        refreshAddBtn();
+    }
+
+    function addRow(preferredType) {
+        var phases = currentPhases();
+        if (phases.length === 0) return;
+        var used = selectedTypes();
+        var next = preferredType && phases.some(function(p) { return p.type === preferredType; }) && used.indexOf(preferredType) === -1
+            ? preferredType
+            : (phases.find(function(p) { return used.indexOf(p.type) === -1; }) || {}).type;
+        if (!next) return;
+
+        var $row = $($template.html());
+        $rows.append($row);
+        rebuildRowOptions();
+        $row.find('.phase-override-type').val(next);
+        rebuildRowOptions();
+    }
+
+    function resetRows() {
+        $rows.empty();
+        var phases = currentPhases();
+        if (phases.length > 0) addRow(phases[0].type);
+        refreshAddBtn();
+    }
+
+    $('#toggle_phase_overrides').on('click', function() {
+        $section.toggle();
+        $('#toggle_phase_overrides_caret').html($section.is(':visible') ? '&#9662;' : '&#9656;');
+    });
+
+    $addBtn.on('click', function() { addRow(); });
+
+    $rows.on('change', '.phase-override-type', rebuildRowOptions);
+    $rows.on('click', '.phase-override-remove', function() {
+        $(this).closest('.phase-override-row').remove();
+        refreshAddBtn();
+    });
+
+    $planSelect.on('change', resetRows);
+    resetRows();
+}
 <% end %>
